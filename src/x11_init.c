@@ -941,6 +941,7 @@ static GLFWbool initExtensions(void)
     // Xdnd (drag and drop) atoms
     _glfw.x11.XdndAware = XInternAtom(_glfw.x11.display, "XdndAware", False);
     _glfw.x11.XdndEnter = XInternAtom(_glfw.x11.display, "XdndEnter", False);
+    _glfw.x11.XdndLeave = XInternAtom(_glfw.x11.display, "XdndLeave", False);
     _glfw.x11.XdndPosition = XInternAtom(_glfw.x11.display, "XdndPosition", False);
     _glfw.x11.XdndStatus = XInternAtom(_glfw.x11.display, "XdndStatus", False);
     _glfw.x11.XdndActionCopy = XInternAtom(_glfw.x11.display, "XdndActionCopy", False);

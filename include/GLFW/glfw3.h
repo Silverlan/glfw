@@ -2041,6 +2041,14 @@ typedef void (* GLFWpreeditcandidatefun)(GLFWwindow* window,
  */
 typedef void (* GLFWdropfun)(GLFWwindow* window, int path_count, const char* paths[]);
 
+/*!Add commentMore actions
+ *
+ * @param[in] entered 1 on enter, 0 on exit
+ * 
+ * 
+ */
+typedef void (* GLFWdragfun)(GLFWwindow*, int);
+
 /*! @brief The function pointer type for monitor configuration callbacks.
  *
  *  This is the function pointer type for monitor configuration callbacks.
@@ -5752,6 +5760,8 @@ GLFWAPI GLFWscrollfun glfwSetScrollCallback(GLFWwindow* window, GLFWscrollfun ca
  *  @ingroup input
  */
 GLFWAPI GLFWdropfun glfwSetDropCallback(GLFWwindow* window, GLFWdropfun callback);
+
+GLFWAPI GLFWdragfun glfwSetDragCallback(GLFWwindow* handle, GLFWdragfun cbfun);
 
 /*! @brief Returns whether the specified joystick is present.
  *

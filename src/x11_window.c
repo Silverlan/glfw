@@ -1780,6 +1780,7 @@ static void processEvent(XEvent *event)
             else if (event->xclient.message_type == _glfw.x11.XdndEnter)
             {
                 // A drag operation has entered the window
+                _glfwInputDrag(window, 1);
                 unsigned long count;
                 Atom* formats = NULL;
                 const GLFWbool list = event->xclient.data.l[1] & 1;
@@ -1806,9 +1807,34 @@ static void processEvent(XEvent *event)
 
                 for (unsigned int i = 0;  i < count;  i++)
                 {
+                    //printf("Format: %d\n", formats[i]);
                     if (formats[i] == _glfw.x11.text_uri_list)
                     {
                         _glfw.x11.xdnd.format = _glfw.x11.text_uri_list;
+                        // Add commentMore actions
+
+                        // Can we get the paths?!
+                        char* data;
+                        const unsigned long result =
+                            _glfwGetWindowPropertyX11(_glfw.x11.xdnd.source,
+                                                    _glfw.x11.XdndEnter,
+                                                    _glfw.x11.text_uri_list,
+                                                    (unsigned char**) &data);
+
+                        if (result)
+                        {
+                            //printf("Got paths\n");
+                            int i, pathCount;
+                            char** paths = _glfwParseUriList(data, &pathCount);
+
+                            for (i = 0;  i < pathCount;  i++)
+                                //printf("%s\n", paths[i]);
+                                free(paths[i]);
+                            free(paths);
+                        }
+
+                        if (data)
+                            XFree(data);
                         break;
                     }
                 }
@@ -1892,6 +1918,10 @@ static void processEvent(XEvent *event)
                            False, NoEventMask, &reply);
                 XFlush(_glfw.x11.display);
             }
+            else if (event->xclient.message_type == _glfw.x11.XdndLeave)
+            {
+                _glfwInputDrag(window, 0);
+            }
 
             return;
         }
@@ -1902,6 +1932,10 @@ static void processEvent(XEvent *event)
             {
                 // The converted data from the drag operation has arrived
                 char* data;
+                 // char* propertyAtomName = XGetAtomName(_glfw.x11.display, event->xselection.property);
+                // char* typeAtomName = XGetAtomName(_glfw.x11.display, event->xselection.target);
+                //printf("Drop file property %d\n", event->xselection.property);
+                //printf("Drop file type%d\n", event->xselection.target);
                 const unsigned long result =
                     _glfwGetWindowPropertyX11(event->xselection.requestor,
                                               event->xselection.property,

@@ -641,6 +641,7 @@ typedef struct _GLFWlibraryX11
     // Xdnd (drag and drop) atoms
     Atom            XdndAware;
     Atom            XdndEnter;
+    Atom            XdndLeave;
     Atom            XdndPosition;
     Atom            XdndStatus;
     Atom            XdndActionCopy;

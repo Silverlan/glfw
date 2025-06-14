@@ -455,6 +455,14 @@ void _glfwInputDrop(_GLFWwindow* window, int count, const char** paths)
         window->callbacks.drop((GLFWwindow*) window, count, paths);
 }
 
+void _glfwInputDrag(_GLFWwindow* window, int entered)
+{
+    if (window->callbacks.drag)
+    {
+        window->callbacks.drag((GLFWwindow*)window, entered);
+    }
+}
+
 // Notifies shared code of a joystick connection or disconnection
 //
 void _glfwInputJoystick(_GLFWjoystick* js, int event)
@@ -469,6 +477,15 @@ void _glfwInputJoystick(_GLFWjoystick* js, int event)
 
     if (_glfw.callbacks.joystick)
         _glfw.callbacks.joystick((int) (js - _glfw.joysticks), event);
+}
+
+GLFWAPI GLFWdragfun glfwSetDragCallback(GLFWwindow* handle, GLFWdragfun cbfun)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    assert(window != NULL);
+    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+    _GLFW_SWAP(GLFWdragfun, window->callbacks.drag, cbfun);
+    return cbfun;
 }
 
 // Notifies shared code of the new value of a joystick axis
