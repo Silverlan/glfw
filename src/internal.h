@@ -111,6 +111,7 @@ typedef void (APIENTRY * PFNGLCLEARPROC)(GLbitfield);
 typedef const GLubyte* (APIENTRY * PFNGLGETSTRINGPROC)(GLenum);
 typedef void (APIENTRY * PFNGLGETINTEGERVPROC)(GLenum,GLint*);
 typedef const GLubyte* (APIENTRY * PFNGLGETSTRINGIPROC)(GLenum,GLuint);
+typedef void (APIENTRY * PFNGLFLUSHPROC)(void);
 
 #define EGL_SUCCESS 0x3000
 #define EGL_NOT_INITIALIZED 0x3001
@@ -376,18 +377,18 @@ struct _GLFWerror
 //
 struct _GLFWinitconfig
 {
-    GLFWbool      hatButtons;
+    bool          hatButtons;
     int           angleType;
     int           platformID;
     GLFWbool      managePreeditCandidate;
     PFN_vkGetInstanceProcAddr vulkanLoader;
     struct {
-        GLFWbool  menubar;
-        GLFWbool  chdir;
+        bool      menubar;
+        bool      chdir;
     } ns;
     struct {
-        GLFWbool  xcbVulkanSurface;
-        GLFWbool  onTheSpotIMStyle;
+        bool      xcbVulkanSurface;
+        bool      onTheSpotIMStyle;
     } x11;
     struct {
         int       libdecorMode;
@@ -406,19 +407,19 @@ struct _GLFWwndconfig
     int           ypos;
     int           width;
     int           height;
-    const char*   title;
-    GLFWbool      resizable;
-    GLFWbool      visible;
-    GLFWbool      decorated;
-    GLFWbool      focused;
-    GLFWbool      autoIconify;
-    GLFWbool      floating;
-    GLFWbool      maximized;
-    GLFWbool      centerCursor;
-    GLFWbool      focusOnShow;
-    GLFWbool      mousePassthrough;
-    GLFWbool      scaleToMonitor;
-    GLFWbool      scaleFramebuffer;
+    bool          resizable;
+    bool          visible;
+    bool          decorated;
+    bool          focused;
+    bool          autoIconify;
+    bool          floating;
+    bool          maximized;
+    bool          centerCursor;
+    bool          focusOnShow;
+    bool          mousePassthrough;
+    bool          scaleToMonitor;
+    bool          scaleFramebuffer;
+    bool          softFullscreen;
     struct {
         char      frameName[256];
     } ns;
@@ -427,8 +428,8 @@ struct _GLFWwndconfig
         char      instanceName[256];
     } x11;
     struct {
-        GLFWbool  keymenu;
-        GLFWbool  showDefault;
+        bool      keymenu;
+        bool      showDefault;
     } win32;
     struct {
         char      appId[256];
@@ -447,15 +448,15 @@ struct _GLFWctxconfig
     int           source;
     int           major;
     int           minor;
-    GLFWbool      forward;
-    GLFWbool      debug;
-    GLFWbool      noerror;
+    bool          forward;
+    bool          debug;
+    bool          noerror;
     int           profile;
     int           robustness;
     int           release;
     _GLFWwindow*  share;
     struct {
-        GLFWbool  offline;
+        bool      offline;
     } nsgl;
 };
 
@@ -480,11 +481,11 @@ struct _GLFWfbconfig
     int         accumBlueBits;
     int         accumAlphaBits;
     int         auxBuffers;
-    GLFWbool    stereo;
+    bool        stereo;
     int         samples;
-    GLFWbool    sRGB;
-    GLFWbool    doublebuffer;
-    GLFWbool    transparent;
+    bool        sRGB;
+    bool        doublebuffer;
+    bool        transparent;
     uintptr_t   handle;
 };
 
@@ -503,6 +504,7 @@ struct _GLFWcontext
     PFNGLGETSTRINGIPROC  GetStringi;
     PFNGLGETINTEGERVPROC GetIntegerv;
     PFNGLGETSTRINGPROC   GetString;
+    PFNGLFLUSHPROC       Flush;
 
     void (*makeCurrent)(_GLFWwindow*);
     void (*swapBuffers)(_GLFWwindow*);
@@ -591,6 +593,13 @@ struct _GLFWwindow
     GLFWbool            stickyMouseButtons;
     GLFWbool            lockKeyMods;
     GLFWbool            disableMouseButtonLimit;
+
+    // Preserve legacy text input behavior for backward compatibility until
+    // glfwSetTextInputFocus is used for this window.
+    GLFWbool            textInputFocusInitialized;
+    GLFWbool            textInputFocusRequested;
+    GLFWbool            textInputFocus;
+
     int                 cursorMode;
     char                mouseButtons[GLFW_MOUSE_BUTTON_LAST + 1];
     char                keys[GLFW_KEY_LAST + 1];
@@ -744,6 +753,7 @@ struct _GLFWplatform
     const char* (*getClipboardString)(void);
     void (*updatePreeditCursorRectangle)(_GLFWwindow*);
     void (*resetPreeditText)(_GLFWwindow*);
+    void (*setTextInputFocus)(_GLFWwindow*,GLFWbool);
     void (*setIMEStatus)(_GLFWwindow*,int);
     int  (*getIMEStatus)(_GLFWwindow*);
     GLFWbool (*initJoysticks)(void);
@@ -853,22 +863,22 @@ struct _GLFWlibrary
         EGLint          major, minor;
         GLFWbool        prefix;
 
-        GLFWbool        KHR_create_context;
-        GLFWbool        KHR_create_context_no_error;
-        GLFWbool        KHR_gl_colorspace;
-        GLFWbool        KHR_get_all_proc_addresses;
-        GLFWbool        KHR_context_flush_control;
-        GLFWbool        EXT_client_extensions;
-        GLFWbool        EXT_platform_base;
-        GLFWbool        EXT_platform_x11;
-        GLFWbool        EXT_platform_wayland;
-        GLFWbool        EXT_present_opaque;
-        GLFWbool        ANGLE_platform_angle;
-        GLFWbool        ANGLE_platform_angle_opengl;
-        GLFWbool        ANGLE_platform_angle_d3d;
-        GLFWbool        ANGLE_platform_angle_vulkan;
-        GLFWbool        ANGLE_platform_angle_metal;
-        GLFWbool        MESA_platform_surfaceless;
+        bool            KHR_create_context;
+        bool            KHR_create_context_no_error;
+        bool            KHR_gl_colorspace;
+        bool            KHR_get_all_proc_addresses;
+        bool            KHR_context_flush_control;
+        bool            EXT_client_extensions;
+        bool            EXT_platform_base;
+        bool            EXT_platform_x11;
+        bool            EXT_platform_wayland;
+        bool            EXT_present_opaque;
+        bool            ANGLE_platform_angle;
+        bool            ANGLE_platform_angle_opengl;
+        bool            ANGLE_platform_angle_d3d;
+        bool            ANGLE_platform_angle_vulkan;
+        bool            ANGLE_platform_angle_metal;
+        bool            MESA_platform_surfaceless;
 
         void*           handle;
 
@@ -912,14 +922,14 @@ struct _GLFWlibrary
         void*           handle;
         char*           extensions[2];
         PFN_vkGetInstanceProcAddr GetInstanceProcAddr;
-        GLFWbool        KHR_surface;
-        GLFWbool        KHR_win32_surface;
-        GLFWbool        MVK_macos_surface;
-        GLFWbool        EXT_metal_surface;
-        GLFWbool        KHR_xlib_surface;
-        GLFWbool        KHR_xcb_surface;
-        GLFWbool        KHR_wayland_surface;
-        GLFWbool        EXT_headless_surface;
+        bool            KHR_surface;
+        bool            KHR_win32_surface;
+        bool            MVK_macos_surface;
+        bool            EXT_metal_surface;
+        bool            KHR_xlib_surface;
+        bool            KHR_xcb_surface;
+        bool            KHR_wayland_surface;
+        bool            EXT_headless_surface;
     } vk;
 
     struct {
@@ -1011,6 +1021,8 @@ void _glfwInputError(int code, const char* format, ...);
 //////////////////////////////////////////////////////////////////////////
 
 GLFWbool _glfwSelectPlatform(int platformID, _GLFWplatform* platform);
+
+GLFWbool _glfwIMEModeControlsTextInputFocus(void);
 
 GLFWbool _glfwStringInExtensionString(const char* string, const char* extensions);
 const _GLFWfbconfig* _glfwChooseFBConfig(const _GLFWfbconfig* desired,

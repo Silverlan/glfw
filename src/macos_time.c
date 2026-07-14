@@ -1,7 +1,7 @@
 //========================================================================
-// GLFW 3.5 Win32 - www.glfw.org
+// GLFW 3.5 macOS - www.glfw.org
 //------------------------------------------------------------------------
-// Copyright (c) 2021 Camilla Löwy <elmindreda@glfw.org>
+// Copyright (c) 2009-2016 Camilla Löwy <elmindreda@glfw.org>
 //
 // This software is provided 'as-is', without any express or implied
 // warranty. In no event will the authors be held liable for any damages
@@ -26,27 +26,32 @@
 
 #include "internal.h"
 
-#if defined(GLFW_BUILD_WIN32_MODULE)
+#if defined(GLFW_BUILD_MACOS_TIMER)
+
+#include <mach/mach_time.h>
+
 
 //////////////////////////////////////////////////////////////////////////
 //////                       GLFW platform API                      //////
 //////////////////////////////////////////////////////////////////////////
 
-void* _glfwPlatformLoadModule(const char* path)
+void _glfwPlatformInitTimer(void)
 {
-    return LoadLibraryA(path);
+    mach_timebase_info_data_t info;
+    mach_timebase_info(&info);
+
+    _glfw.timer.macos.frequency = (info.denom * 1e9) / info.numer;
 }
 
-void _glfwPlatformFreeModule(void* module)
+uint64_t _glfwPlatformGetTimerValue(void)
 {
-    if (module)
-        FreeLibrary((HMODULE) module);
+    return mach_absolute_time();
 }
 
-GLFWproc _glfwPlatformGetModuleSymbol(void* module, const char* name)
+uint64_t _glfwPlatformGetTimerFrequency(void)
 {
-    return (GLFWproc) GetProcAddress((HMODULE) module, name);
+    return _glfw.timer.macos.frequency;
 }
 
-#endif // GLFW_BUILD_WIN32_MODULE
+#endif // GLFW_BUILD_MACOS_TIMER
 

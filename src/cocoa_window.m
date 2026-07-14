@@ -1,5 +1,5 @@
 //========================================================================
-// GLFW 3.5 macOS - www.glfw.org
+// GLFW 3.5 Cocoa - www.glfw.org
 //------------------------------------------------------------------------
 // Copyright (c) 2009-2019 Camilla Löwy <elmindreda@glfw.org>
 //
@@ -37,6 +37,35 @@
 // HACK: This enum value is missing from framework headers on OS X 10.11 despite
 //       having been (according to documentation) added in Mac OS X 10.7
 #define NSWindowCollectionBehaviorFullScreenNone (1 << 9)
+
+// Returns whether the window is in macOS native full screen
+//
+static GLFWbool isSoftFullscreen(_GLFWwindow* window)
+{
+    return [window->ns.object styleMask] & NSWindowStyleMaskFullScreen;
+}
+
+// Set macOS native full screen without switching monitor video modes
+//
+static void setSoftFullscreen(_GLFWwindow* window, GLFWbool enabled)
+{
+    if (isSoftFullscreen(window) == enabled)
+        return;
+
+    NSUInteger styleMask = [window->ns.object styleMask];
+
+    // Native full screen requires a resizable window style
+    styleMask |= NSWindowStyleMaskResizable;
+    [window->ns.object setStyleMask:styleMask];
+
+    [window->ns.object toggleFullScreen:nil];
+
+    if (!window->resizable)
+    {
+        styleMask &= ~NSWindowStyleMaskResizable;
+        [window->ns.object setStyleMask:styleMask];
+    }
+}
 
 // Returns whether the cursor is in the content area of the specified window
 //
@@ -573,7 +602,14 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
     if (![self hasMarkedText])
         _glfwInputKey(window, key, [event keyCode], GLFW_PRESS, mods);
 
-    [self interpretKeyEvents:@[event]];
+    if (!window->textInputFocusInitialized || window->textInputFocus)
+        [self interpretKeyEvents:@[event]];
+    else
+    {
+        NSString* characters = [event characters];
+        if (characters)
+            [self insertText:characters replacementRange:[self selectedRange]];
+    }
 }
 
 - (void)flagsChanged:(NSEvent *)event
@@ -603,6 +639,34 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
     const int key = translateKey([event keyCode]);
     const int mods = translateFlags([event modifierFlags]);
     _glfwInputKey(window, key, [event keyCode], GLFW_RELEASE, mods);
+}
+
+- (BOOL)performKeyEquivalent:(NSEvent *)event
+{
+    // HACK: Some key combinations are consumed before reaching keyDown:
+    //       so we claim those events and emit them here
+    const int key = translateKey([event keyCode]);
+    const int mods = translateFlags([event modifierFlags]);
+
+    if (mods & GLFW_MOD_CONTROL)
+    {
+        if (key == GLFW_KEY_TAB || key == GLFW_KEY_ESCAPE)
+        {
+            _glfwInputKey(window, key, [event keyCode], GLFW_PRESS, mods);
+            return YES;
+        }
+    }
+
+    if (mods & GLFW_MOD_SUPER)
+    {
+        if (key == GLFW_KEY_PERIOD)
+        {
+            _glfwInputKey(window, key, [event keyCode], GLFW_PRESS, mods);
+            return YES;
+        }
+    }
+
+    return [super performKeyEquivalent:event];
 }
 
 - (void)scrollWheel:(NSEvent *)event
@@ -987,7 +1051,7 @@ static GLFWbool createNativeWindow(_GLFWwindow* window,
 
     [window->ns.object setContentView:window->ns.view];
     [window->ns.object makeFirstResponder:window->ns.view];
-    [window->ns.object setTitle:@(wndconfig->title)];
+    [window->ns.object setTitle:@(window->title)];
     [window->ns.object setDelegate:window->ns.delegate];
     [window->ns.object setAcceptsMouseMovedEvents:YES];
     [window->ns.object setRestorable:NO];
@@ -1026,6 +1090,13 @@ GLFWbool _glfwCreateWindowCocoa(_GLFWwindow* window,
                                 const _GLFWfbconfig* fbconfig)
 {
     @autoreleasepool {
+
+    GLFWbool softFullscreen = GLFW_FALSE;
+    if (_glfw.hints.window.softFullscreen && window->monitor)
+    {
+        softFullscreen = GLFW_TRUE;
+        _glfwInputWindowMonitor(window, NULL);
+    }
 
     if (!createNativeWindow(window, wndconfig, fbconfig))
         return GLFW_FALSE;
@@ -1090,6 +1161,9 @@ GLFWbool _glfwCreateWindowCocoa(_GLFWwindow* window,
            selector:@selector(imeStatusChangeNotified:)
                name:NSTextInputContextKeyboardSelectionDidChangeNotification
              object:nil];
+
+    if (softFullscreen)
+        setSoftFullscreen(window, GLFW_TRUE);
 
     return GLFW_TRUE;
 
@@ -1358,6 +1432,14 @@ void _glfwSetWindowMonitorCocoa(_GLFWwindow* window,
                                 int refreshRate)
 {
     @autoreleasepool {
+
+    if (_glfw.hints.window.softFullscreen)
+    {
+        setSoftFullscreen(window, monitor != NULL);
+
+        if (monitor)
+            return;
+    }
 
     if (window->monitor == monitor)
     {
@@ -2007,6 +2089,12 @@ void _glfwResetPreeditTextCocoa(_GLFWwindow* window)
     [window->ns.view unmarkText];
 
     } // autoreleasepool
+}
+
+void _glfwSetTextInputFocusCocoa(_GLFWwindow* window, GLFWbool focused)
+{
+    if (!focused)
+        _glfwResetPreeditTextCocoa(window);
 }
 
 void _glfwSetIMEStatusCocoa(_GLFWwindow* window, int active)

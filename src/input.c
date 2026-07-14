@@ -375,10 +375,8 @@ void _glfwInputPreeditCandidate(_GLFWwindow* window)
 void _glfwInputScroll(_GLFWwindow* window, double xoffset, double yoffset)
 {
     assert(window != NULL);
-    assert(xoffset > -FLT_MAX);
-    assert(xoffset < FLT_MAX);
-    assert(yoffset > -FLT_MAX);
-    assert(yoffset < FLT_MAX);
+    assert(isfinite(xoffset));
+    assert(isfinite(yoffset));
 
     if (window->callbacks.scroll)
         window->callbacks.scroll((GLFWwindow*) window, xoffset, yoffset);
@@ -417,10 +415,8 @@ void _glfwInputMouseClick(_GLFWwindow* window, int button, int action, int mods)
 void _glfwInputCursorPos(_GLFWwindow* window, double xpos, double ypos)
 {
     assert(window != NULL);
-    assert(xpos > -FLT_MAX);
-    assert(xpos < FLT_MAX);
-    assert(ypos > -FLT_MAX);
-    assert(ypos < FLT_MAX);
+    assert(isfinite(xpos));
+    assert(isfinite(ypos));
 
     if (window->virtualCursorPosX == xpos && window->virtualCursorPosY == ypos)
         return;
@@ -457,10 +453,10 @@ void _glfwInputDrop(_GLFWwindow* window, int count, const char** paths)
 
 void _glfwInputDrag(_GLFWwindow* window, int entered)
 {
-    if (window->callbacks.drag)
-    {
-        window->callbacks.drag((GLFWwindow*)window, entered);
-    }
+	if (window->callbacks.drag)
+	{
+		window->callbacks.drag((GLFWwindow*)window, entered);
+	}
 }
 
 // Notifies shared code of a joystick connection or disconnection
@@ -481,11 +477,11 @@ void _glfwInputJoystick(_GLFWjoystick* js, int event)
 
 GLFWAPI GLFWdragfun glfwSetDragCallback(GLFWwindow* handle, GLFWdragfun cbfun)
 {
-    _GLFWwindow* window = (_GLFWwindow*) handle;
-    assert(window != NULL);
-    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
-    _GLFW_SWAP(GLFWdragfun, window->callbacks.drag, cbfun);
-    return cbfun;
+	_GLFWwindow* window = (_GLFWwindow*) handle;
+	assert(window != NULL);
+	_GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+	_GLFW_SWAP(GLFWdragfun, window->callbacks.drag, cbfun);
+	return cbfun;
 }
 
 // Notifies shared code of the new value of a joystick axis
@@ -495,6 +491,7 @@ void _glfwInputJoystickAxis(_GLFWjoystick* js, int axis, float value)
     assert(js != NULL);
     assert(axis >= 0);
     assert(axis < js->axisCount);
+    assert(isfinite(value));
 
     js->axes[axis] = value;
 }
@@ -613,6 +610,31 @@ void _glfwCenterCursorInContentArea(_GLFWwindow* window)
     _glfw.platform.setCursorPos(window, width / 2.0, height / 2.0);
 }
 
+GLFWbool _glfwIMEModeControlsTextInputFocus(void)
+{
+    const char* value = getenv("GLFW_IME_MODE_AS_TEXT_INPUT_FOCUS");
+
+    if (value && *value)
+        return strcmp(value, "0") != 0;
+
+#if defined(_GLFW_IME_MODE_AS_TEXT_INPUT_FOCUS)
+    return GLFW_TRUE;
+#else
+    return GLFW_FALSE;
+#endif
+}
+
+static GLFWbool getEffectiveTextInputFocus(_GLFWwindow* window)
+{
+    if (_glfwIMEModeControlsTextInputFocus())
+    {
+        return window->textInputFocusRequested &&
+               window->cursorMode == GLFW_CURSOR_NORMAL;
+    }
+
+    return window->textInputFocusRequested;
+}
+
 
 //////////////////////////////////////////////////////////////////////////
 //////                        GLFW public API                       //////
@@ -640,6 +662,12 @@ GLFWAPI int glfwGetInputMode(GLFWwindow* handle, int mode)
         case GLFW_UNLIMITED_MOUSE_BUTTONS:
             return window->disableMouseButtonLimit;
         case GLFW_IME:
+            if (_glfwIMEModeControlsTextInputFocus() &&
+                window->textInputFocusInitialized)
+            {
+                return window->textInputFocusRequested;
+            }
+
             return _glfw.platform.getIMEStatus(window);
     }
 
@@ -678,6 +706,23 @@ GLFWAPI void glfwSetInputMode(GLFWwindow* handle, int mode, int value)
                                         &window->virtualCursorPosX,
                                         &window->virtualCursorPosY);
             _glfw.platform.setCursorMode(window, value);
+            if (_glfwIMEModeControlsTextInputFocus())
+            {
+                if (!window->textInputFocusInitialized)
+                {
+                    window->textInputFocusInitialized = GLFW_TRUE;
+                    window->textInputFocusRequested = GLFW_TRUE;
+                    window->textInputFocus = GLFW_TRUE;
+                }
+
+                const GLFWbool focused = getEffectiveTextInputFocus(window);
+
+                if (window->textInputFocus != focused)
+                {
+                    window->textInputFocus = focused;
+                    _glfw.platform.setTextInputFocus(window, focused);
+                }
+            }
             return;
         }
 
@@ -757,6 +802,16 @@ GLFWAPI void glfwSetInputMode(GLFWwindow* handle, int mode, int value)
 
         case GLFW_IME:
         {
+            if (_glfwIMEModeControlsTextInputFocus())
+            {
+                value = value ? GLFW_TRUE : GLFW_FALSE;
+                window->textInputFocusInitialized = GLFW_TRUE;
+                window->textInputFocusRequested = value;
+                window->textInputFocus = getEffectiveTextInputFocus(window);
+                _glfw.platform.setTextInputFocus(window, window->textInputFocus);
+                return;
+            }
+
             _glfw.platform.setIMEStatus(window, value ? GLFW_TRUE : GLFW_FALSE);
             return;
         }
@@ -885,8 +940,7 @@ GLFWAPI void glfwSetCursorPos(GLFWwindow* handle, double xpos, double ypos)
     _GLFWwindow* window = (_GLFWwindow*) handle;
     assert(window != NULL);
 
-    if (xpos != xpos || xpos < -DBL_MAX || xpos > DBL_MAX ||
-        ypos != ypos || ypos < -DBL_MAX || ypos > DBL_MAX)
+    if (!isfinite(xpos) || !isfinite(ypos))
     {
         _glfwInputError(GLFW_INVALID_VALUE,
                         "Invalid cursor position %f %f",
@@ -1059,6 +1113,20 @@ GLFWAPI void glfwResetPreeditText(GLFWwindow* handle)
 {
     _GLFWwindow* window = (_GLFWwindow*) handle;
     _glfw.platform.resetPreeditText(window);
+}
+
+GLFWAPI void glfwSetTextInputFocus(GLFWwindow* handle, int focused)
+{
+    _GLFW_REQUIRE_INIT();
+
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    assert(window != NULL);
+
+    focused = focused ? GLFW_TRUE : GLFW_FALSE;
+    window->textInputFocusInitialized = GLFW_TRUE;
+    window->textInputFocusRequested = focused;
+    window->textInputFocus = getEffectiveTextInputFocus(window);
+    _glfw.platform.setTextInputFocus(window, window->textInputFocus);
 }
 
 GLFWAPI unsigned int* glfwGetPreeditCandidate(GLFWwindow* handle, int index, int* textCount)
@@ -1647,7 +1715,7 @@ GLFWAPI void glfwSetTime(double time)
 {
     _GLFW_REQUIRE_INIT();
 
-    if (time != time || time < 0.0 || time > 18446744073.0)
+    if (!isfinite(time) || time < 0.0 || time > 18446744073.0)
     {
         _glfwInputError(GLFW_INVALID_VALUE, "Invalid time %f", time);
         return;

@@ -1191,6 +1191,7 @@ GLFWbool _glfwConnectX11(int platformID, _GLFWplatform* platform)
         .getClipboardString = _glfwGetClipboardStringX11,
         .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleX11,
         .resetPreeditText = _glfwResetPreeditTextX11,
+        .setTextInputFocus = _glfwSetTextInputFocusX11,
         .setIMEStatus = _glfwSetIMEStatusX11,
         .getIMEStatus = _glfwGetIMEStatusX11,
 #if defined(GLFW_BUILD_LINUX_JOYSTICK)
@@ -1553,7 +1554,9 @@ int _glfwInitX11(void)
     _glfw.x11.helperWindowHandle = createHelperWindow();
     _glfw.x11.hiddenCursorHandle = createHiddenCursor();
 
-    if (XSupportsLocale() && _glfw.x11.xlib.utf8)
+    _glfwLoadIMEModuleX11();
+
+    if (!_glfwHasIMEModuleX11() && XSupportsLocale() && _glfw.x11.xlib.utf8)
     {
         XSetLocaleModifiers("");
 
@@ -1591,10 +1594,13 @@ void _glfwTerminateX11(void)
     _glfw_free(_glfw.x11.primarySelectionString);
     _glfw_free(_glfw.x11.clipboardString);
 
-    XUnregisterIMInstantiateCallback(_glfw.x11.display,
-                                     NULL, NULL, NULL,
-                                     inputMethodInstantiateCallback,
-                                     NULL);
+    if (!_glfwHasIMEModuleX11())
+    {
+        XUnregisterIMInstantiateCallback(_glfw.x11.display,
+                                         NULL, NULL, NULL,
+                                         inputMethodInstantiateCallback,
+                                         NULL);
+    }
 
     if (_glfw.x11.im)
     {
@@ -1602,52 +1608,12 @@ void _glfwTerminateX11(void)
         _glfw.x11.im = NULL;
     }
 
+    _glfwUnloadIMEModuleX11();
+
     if (_glfw.x11.display)
     {
         XCloseDisplay(_glfw.x11.display);
         _glfw.x11.display = NULL;
-    }
-
-    if (_glfw.x11.x11xcb.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.x11xcb.handle);
-        _glfw.x11.x11xcb.handle = NULL;
-    }
-
-    if (_glfw.x11.xcursor.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.xcursor.handle);
-        _glfw.x11.xcursor.handle = NULL;
-    }
-
-    if (_glfw.x11.randr.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.randr.handle);
-        _glfw.x11.randr.handle = NULL;
-    }
-
-    if (_glfw.x11.xinerama.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.xinerama.handle);
-        _glfw.x11.xinerama.handle = NULL;
-    }
-
-    if (_glfw.x11.xrender.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.xrender.handle);
-        _glfw.x11.xrender.handle = NULL;
-    }
-
-    if (_glfw.x11.vidmode.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.vidmode.handle);
-        _glfw.x11.vidmode.handle = NULL;
-    }
-
-    if (_glfw.x11.xi.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.xi.handle);
-        _glfw.x11.xi.handle = NULL;
     }
 
     _glfwTerminateOSMesa();
@@ -1656,17 +1622,23 @@ void _glfwTerminateX11(void)
     _glfwTerminateEGL();
     _glfwTerminateGLX();
 
-    if (_glfw.x11.xlib.handle)
-    {
-        _glfwPlatformFreeModule(_glfw.x11.xlib.handle);
-        _glfw.x11.xlib.handle = NULL;
-    }
+    _glfwPlatformFreeModule(_glfw.x11.x11xcb.handle);
+    _glfwPlatformFreeModule(_glfw.x11.xcursor.handle);
+    _glfwPlatformFreeModule(_glfw.x11.randr.handle);
+    _glfwPlatformFreeModule(_glfw.x11.xinerama.handle);
+    _glfwPlatformFreeModule(_glfw.x11.xrender.handle);
+    _glfwPlatformFreeModule(_glfw.x11.xshape.handle);
+    _glfwPlatformFreeModule(_glfw.x11.vidmode.handle);
+    _glfwPlatformFreeModule(_glfw.x11.xi.handle);
+    _glfwPlatformFreeModule(_glfw.x11.xlib.handle);
 
     if (_glfw.x11.emptyEventPipe[0] || _glfw.x11.emptyEventPipe[1])
     {
         close(_glfw.x11.emptyEventPipe[0]);
         close(_glfw.x11.emptyEventPipe[1]);
     }
+
+    memset(&_glfw.x11, 0, sizeof(_glfw.x11));
 }
 
 #endif // _GLFW_X11

@@ -10,7 +10,7 @@ add_library(glfw ${GLFW_LIBRARY_TYPE}
 # The time, thread and module code is shared between all backends on a given OS,
 # including the null backend, which still needs those bits to be functional
 if (APPLE)
-    target_sources(glfw PRIVATE cocoa_time.h cocoa_time.c posix_thread.h
+    target_sources(glfw PRIVATE macos_time.h macos_time.c posix_thread.h
                                 posix_module.c posix_thread.c)
 elseif (WIN32)
     target_sources(glfw PRIVATE win32_time.h win32_thread.h win32_module.c
@@ -46,7 +46,8 @@ endif()
 
 if (GLFW_BUILD_X11)
     target_compile_definitions(glfw PRIVATE _GLFW_X11)
-    target_sources(glfw PRIVATE x11_platform.h xkb_unicode.h x11_init.c
+    target_sources(glfw PRIVATE x11_platform.h x11_ime_module.h
+                                x11_ime_module.c x11_init.c
                                 x11_monitor.c x11_window.c xkb_unicode.c
                                 glx_context.c)
 endif()
@@ -140,6 +141,10 @@ target_include_directories(glfw PRIVATE
                            "${GLFW_BINARY_DIR}/src")
 target_link_libraries(glfw PRIVATE Threads::Threads)
 
+if (GLFW_IME_MODE_AS_TEXT_INPUT_FOCUS)
+    target_compile_definitions(glfw PRIVATE _GLFW_IME_MODE_AS_TEXT_INPUT_FOCUS)
+endif()
+
 if (GLFW_BUILD_WIN32)
     list(APPEND glfw_PKG_LIBS "-lgdi32")
 endif()
@@ -147,11 +152,11 @@ endif()
 if (GLFW_BUILD_COCOA)
     target_link_libraries(glfw PRIVATE "-framework Cocoa"
                                        "-framework IOKit"
-                                       "-framework CoreFoundation"
                                        "-framework QuartzCore")
 
-    set(glfw_PKG_DEPS "")
-    set(glfw_PKG_LIBS "-framework Cocoa -framework IOKit -framework CoreFoundation -framework QuartzCore")
+    list(APPEND glfw_PKG_LIBS "-framework Cocoa"
+                              "-framework IOKit"
+                              "-framework QuartzCore")
 endif()
 
 if (GLFW_BUILD_WAYLAND)
@@ -213,6 +218,40 @@ if (GLFW_BUILD_X11)
         message(FATAL_ERROR "X Shape headers not found; install libxext development package")
     endif()
     target_include_directories(glfw PRIVATE "${X11_Xshape_INCLUDE_PATH}")
+
+    if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        include(FindPkgConfig)
+        pkg_check_modules(DBUS1 dbus-1)
+        if (GLFW_EMBED_IBUS_MODULE AND NOT DBUS1_FOUND)
+            message(FATAL_ERROR "D-Bus development package is required for embedded glfw-ibus")
+        endif()
+        if (DBUS1_FOUND)
+            if (GLFW_EMBED_IBUS_MODULE)
+                target_sources(glfw PRIVATE x11_ibus_module.c)
+                target_compile_definitions(glfw PRIVATE _GLFW_EMBED_IBUS_MODULE)
+                target_include_directories(glfw PRIVATE ${DBUS1_INCLUDE_DIRS})
+                target_link_libraries(glfw PRIVATE ${DBUS1_LIBRARIES})
+                target_compile_options(glfw PRIVATE ${DBUS1_CFLAGS_OTHER})
+                target_link_directories(glfw PRIVATE ${DBUS1_LIBRARY_DIRS})
+            endif()
+
+            add_library(glfw-ibus MODULE x11_ibus_module.c x11_ime_module.h)
+            set_target_properties(glfw-ibus PROPERTIES
+                                  PREFIX ""
+                                  C_STANDARD 99
+                                  C_EXTENSIONS OFF
+                                  FOLDER "GLFW3")
+            target_include_directories(glfw-ibus PRIVATE
+                                       "${GLFW_SOURCE_DIR}/src"
+                                       "${GLFW_SOURCE_DIR}/include"
+                                       ${DBUS1_INCLUDE_DIRS})
+            target_link_libraries(glfw-ibus PRIVATE Threads::Threads ${DBUS1_LIBRARIES})
+            target_compile_options(glfw-ibus PRIVATE ${DBUS1_CFLAGS_OTHER})
+            target_link_directories(glfw-ibus PRIVATE ${DBUS1_LIBRARY_DIRS})
+        else()
+            message(STATUS "D-Bus development package not found; skipping glfw-ibus prototype module")
+        endif()
+    endif()
 endif()
 
 if (UNIX AND NOT APPLE)
@@ -236,6 +275,11 @@ if (UNIX AND NOT APPLE)
     endif()
 endif()
 
+if (APPLE)
+    target_link_libraries(glfw PRIVATE "-framework CoreFoundation")
+    list(APPEND glfw_PKG_LIBS "-framework CoreFoundation")
+endif()
+
 if (WIN32)
     if (GLFW_USE_HYBRID_HPG)
         target_compile_definitions(glfw PRIVATE _GLFW_USE_HYBRID_HPG)
@@ -257,24 +301,6 @@ if (GLFW_BUILD_WIN32)
     target_compile_definitions(glfw PRIVATE UNICODE _UNICODE)
 endif()
 
-# HACK: When building on MinGW, WINVER and UNICODE need to be defined before
-# the inclusion of stddef.h (by glfw3.h), which is itself included before
-# win32_platform.h.  We define them here until a saner solution can be found
-# NOTE: MinGW-w64 and Visual C++ do /not/ need this hack.
-if (MINGW)
-    target_compile_definitions(glfw PRIVATE WINVER=0x0501)
-endif()
-
-# Workaround for legacy MinGW not providing XInput and DirectInput
-if (MINGW)
-    include(CheckIncludeFile)
-    check_include_file(dinput.h DINPUT_H_FOUND)
-    check_include_file(xinput.h XINPUT_H_FOUND)
-    if (NOT DINPUT_H_FOUND OR NOT XINPUT_H_FOUND)
-        target_include_directories(glfw PRIVATE "${GLFW_SOURCE_DIR}/deps/mingw")
-    endif()
-endif()
-
 # Workaround for the MS CRT deprecating parts of the standard library
 if (MSVC OR CMAKE_C_SIMULATE_ID STREQUAL "MSVC")
     target_compile_definitions(glfw PRIVATE _CRT_SECURE_NO_WARNINGS)
@@ -288,10 +314,6 @@ endif()
 if (GLFW_BUILD_SHARED_LIBRARY)
     if (WIN32)
         if (MINGW)
-            # Remove the dependency on the shared version of libgcc
-            # NOTE: MinGW-w64 has the correct default but MinGW needs this
-            target_link_libraries(glfw PRIVATE "-static-libgcc")
-
             # Remove the lib prefix on the DLL (but not the import library)
             set_target_properties(glfw PROPERTIES PREFIX "")
 
@@ -362,4 +384,3 @@ if (GLFW_INSTALL)
             ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
             LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 endif()
-

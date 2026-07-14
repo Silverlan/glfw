@@ -1,5 +1,5 @@
 //========================================================================
-// GLFW 3.5 macOS - www.glfw.org
+// GLFW 3.5 Cocoa - www.glfw.org
 //------------------------------------------------------------------------
 // Copyright (c) 2009-2019 Camilla Löwy <elmindreda@glfw.org>
 //
@@ -300,6 +300,7 @@ const char* _glfwGetClipboardStringCocoa(void);
 
 void _glfwUpdatePreeditCursorRectangleCocoa(_GLFWwindow* window);
 void _glfwResetPreeditTextCocoa(_GLFWwindow* window);
+void _glfwSetTextInputFocusCocoa(_GLFWwindow* window, GLFWbool focused);
 void _glfwSetIMEStatusCocoa(_GLFWwindow* window, int active);
 int _glfwGetIMEStatusCocoa(_GLFWwindow* window);
 
@@ -325,8 +326,6 @@ void _glfwSetVideoModeCocoa(_GLFWmonitor* monitor, const GLFWvidmode* desired);
 void _glfwRestoreVideoModeCocoa(_GLFWmonitor* monitor);
 
 float _glfwTransformYCocoa(float y);
-
-void* _glfwLoadLocalVulkanLoaderCocoa(void);
 
 GLFWbool _glfwInitNSGL(void);
 void _glfwTerminateNSGL(void);

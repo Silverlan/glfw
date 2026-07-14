@@ -410,9 +410,6 @@ static void updateFramebufferTransparency(const _GLFWwindow* window)
     BOOL composition, opaque;
     DWORD color;
 
-    if (!IsWindowsVistaOrGreater())
-        return;
-
     if (FAILED(DwmIsCompositionEnabled(&composition)) || !composition)
        return;
 
@@ -470,7 +467,9 @@ static void fitToMonitor(_GLFWwindow* window)
                  mi.rcMonitor.left,
                  mi.rcMonitor.top,
                  mi.rcMonitor.right - mi.rcMonitor.left,
-                 mi.rcMonitor.bottom - mi.rcMonitor.top,
+                 _glfw.hints.window.softFullscreen ?
+                     mi.rcMonitor.bottom - mi.rcMonitor.top + 1 :
+                     mi.rcMonitor.bottom - mi.rcMonitor.top,
                  SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOCOPYBITS);
 }
 
@@ -837,6 +836,11 @@ static void clearImmPreedit(_GLFWwindow* window)
     _glfwInputPreedit(window);
 }
 
+static GLFWbool textInputFocusDisabled(_GLFWwindow* window)
+{
+    return window->textInputFocusInitialized && !window->textInputFocus;
+}
+
 // Commit the result texts of Imm32 to character-callback
 //
 static GLFWbool commitImmResultStr(_GLFWwindow* window)
@@ -907,6 +911,9 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
     {
         case WM_IME_SETCONTEXT:
         {
+            if (textInputFocusDisabled(window))
+                break;
+
             // To draw preedit text by an application side
             if (lParam & ISC_SHOWUICOMPOSITIONWINDOW)
                 lParam &= ~ISC_SHOWUICOMPOSITIONWINDOW;
@@ -1148,6 +1155,9 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
         case WM_IME_COMPOSITION:
         {
+            if (textInputFocusDisabled(window))
+                return 0;
+
             if (lParam & (GCS_RESULTSTR | GCS_COMPSTR))
             {
                 if (lParam & GCS_RESULTSTR)
@@ -1161,6 +1171,9 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
         case WM_IME_ENDCOMPOSITION:
         {
+            if (textInputFocusDisabled(window))
+                return 0;
+
             clearImmPreedit(window);
             // Usually clearing candidates in IMN_CLOSECANDIDATE is sufficient.
             // However, some IME need it here, e.g. Google Japanese Input.
@@ -1170,6 +1183,9 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
         case WM_IME_NOTIFY:
         {
+            if (textInputFocusDisabled(window))
+                return 0;
+
             switch (wParam)
             {
                 case IMN_SETOPENSTATUS:
@@ -1377,7 +1393,6 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
 
         case WM_MOUSEHWHEEL:
         {
-            // This message is only sent on Windows Vista and later
             // NOTE: The X-axis is inverted for consistency with macOS and X11
             _glfwInputScroll(window, -((SHORT) HIWORD(wParam) / (double) WHEEL_DELTA), 0.0);
             return 0;
@@ -1775,7 +1790,7 @@ static int createNativeWindow(_GLFWwindow* window,
         frameHeight = rect.bottom - rect.top;
     }
 
-    wideTitle = _glfwCreateWideStringFromUTF8Win32(wndconfig->title);
+    wideTitle = _glfwCreateWideStringFromUTF8Win32(window->title);
     if (!wideTitle)
         return GLFW_FALSE;
 
@@ -1801,15 +1816,9 @@ static int createNativeWindow(_GLFWwindow* window,
 
     SetPropW(window->win32.handle, L"GLFW", window);
 
-    if (IsWindows7OrGreater())
-    {
-        ChangeWindowMessageFilterEx(window->win32.handle,
-                                    WM_DROPFILES, MSGFLT_ALLOW, NULL);
-        ChangeWindowMessageFilterEx(window->win32.handle,
-                                    WM_COPYDATA, MSGFLT_ALLOW, NULL);
-        ChangeWindowMessageFilterEx(window->win32.handle,
-                                    WM_COPYGLOBALDATA, MSGFLT_ALLOW, NULL);
-    }
+    ChangeWindowMessageFilterEx(window->win32.handle, WM_DROPFILES, MSGFLT_ALLOW, NULL);
+    ChangeWindowMessageFilterEx(window->win32.handle, WM_COPYDATA, MSGFLT_ALLOW, NULL);
+    ChangeWindowMessageFilterEx(window->win32.handle, WM_COPYGLOBALDATA, MSGFLT_ALLOW, NULL);
 
     window->win32.scaleToMonitor = wndconfig->scaleToMonitor;
     window->win32.keymenu = wndconfig->win32.keymenu;
@@ -1964,6 +1973,9 @@ void _glfwDestroyWindowWin32(_GLFWwindow* window)
 
     if (window->win32.handle)
     {
+        if (window->win32.textInputContext)
+            ImmAssociateContext(window->win32.handle, window->win32.textInputContext);
+
         RemovePropW(window->win32.handle, L"GLFW");
         DestroyWindow(window->win32.handle);
         window->win32.handle = NULL;
@@ -2299,7 +2311,9 @@ void _glfwSetWindowMonitorWin32(_GLFWwindow* window,
                      mi.rcMonitor.left,
                      mi.rcMonitor.top,
                      mi.rcMonitor.right - mi.rcMonitor.left,
-                     mi.rcMonitor.bottom - mi.rcMonitor.top,
+                     _glfw.hints.window.softFullscreen ?
+                         mi.rcMonitor.bottom - mi.rcMonitor.top + 1 :
+                         mi.rcMonitor.bottom - mi.rcMonitor.top,
                      flags);
     }
     else
@@ -2373,9 +2387,6 @@ GLFWbool _glfwFramebufferTransparentWin32(_GLFWwindow* window)
     DWORD color;
 
     if (!window->win32.transparent)
-        return GLFW_FALSE;
-
-    if (!IsWindowsVistaOrGreater())
         return GLFW_FALSE;
 
     if (FAILED(DwmIsCompositionEnabled(&composition)) || !composition)
@@ -2869,6 +2880,9 @@ void _glfwUpdatePreeditCursorRectangleWin32(_GLFWwindow* window)
     int h = preedit->cursorHeight;
 
     COMPOSITIONFORM areaRect = { CFS_RECT, { x, y }, { x, y, x + w, y + h } };
+    if (!hIMC)
+        return;
+
     ImmSetCompositionWindow(hIMC, &areaRect);
 
     CANDIDATEFORM excludeRect = { 0, CFS_EXCLUDE, { x, y }, { x, y, x + w, y + h } };
@@ -2881,24 +2895,91 @@ void _glfwResetPreeditTextWin32(_GLFWwindow* window)
 {
     HWND hWnd = window->win32.handle;
     HIMC hIMC = ImmGetContext(hWnd);
-    ImmNotifyIME(hIMC, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
-    ImmReleaseContext(hWnd, hIMC);
+    GLFWbool releaseContext = GLFW_TRUE;
+
+    if (!hIMC && window->win32.textInputContext)
+    {
+        hIMC = window->win32.textInputContext;
+        releaseContext = GLFW_FALSE;
+    }
+
+    if (hIMC)
+    {
+        ImmNotifyIME(hIMC, NI_COMPOSITIONSTR, CPS_CANCEL, 0);
+        if (releaseContext)
+            ImmReleaseContext(hWnd, hIMC);
+    }
+
+    clearImmPreedit(window);
+    clearImmCandidate(window);
+}
+
+void _glfwSetTextInputFocusWin32(_GLFWwindow* window, GLFWbool focused)
+{
+    if (focused)
+    {
+        if (window->win32.textInputContext)
+        {
+            ImmAssociateContext(window->win32.handle,
+                                window->win32.textInputContext);
+            window->win32.textInputContext = NULL;
+            _glfwUpdatePreeditCursorRectangleWin32(window);
+        }
+    }
+    else
+    {
+        _glfwResetPreeditTextWin32(window);
+
+        if (!window->win32.textInputContext)
+        {
+            window->win32.textInputContext =
+                ImmAssociateContext(window->win32.handle, NULL);
+        }
+    }
 }
 
 void _glfwSetIMEStatusWin32(_GLFWwindow* window, int active)
 {
     HWND hWnd = window->win32.handle;
-    HIMC hIMC = ImmGetContext(hWnd);
+    HIMC hIMC = window->win32.textInputContext;
+    GLFWbool releaseContext = GLFW_FALSE;
+
+    if (!hIMC)
+    {
+        hIMC = ImmGetContext(hWnd);
+        releaseContext = GLFW_TRUE;
+    }
+
+    if (!hIMC)
+        return;
+
     ImmSetOpenStatus(hIMC, active ? TRUE : FALSE);
-    ImmReleaseContext(hWnd, hIMC);
+
+    if (releaseContext)
+        ImmReleaseContext(hWnd, hIMC);
 }
 
 int _glfwGetIMEStatusWin32(_GLFWwindow* window)
 {
     HWND hWnd = window->win32.handle;
-    HIMC hIMC = ImmGetContext(hWnd);
-    BOOL result = ImmGetOpenStatus(hIMC);
-    ImmReleaseContext(hWnd, hIMC);
+    HIMC hIMC = window->win32.textInputContext;
+    GLFWbool releaseContext = GLFW_FALSE;
+    BOOL result;
+
+    if (!hIMC)
+    {
+        hIMC = ImmGetContext(hWnd);
+        releaseContext = GLFW_TRUE;
+    }
+
+    if (!hIMC)
+        return GLFW_FALSE;
+
+    result = ImmGetOpenStatus(hIMC);
+
+    if (releaseContext)
+        ImmReleaseContext(hWnd, hIMC);
+
     return result ? GLFW_TRUE : GLFW_FALSE;
 }
 

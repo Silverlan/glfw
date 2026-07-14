@@ -1,7 +1,7 @@
 //========================================================================
-// GLFW 3.5 Win32 - www.glfw.org
+// GLFW 3.5 macOS - www.glfw.org
 //------------------------------------------------------------------------
-// Copyright (c) 2021 Camilla Löwy <elmindreda@glfw.org>
+// Copyright (c) 2009-2021 Camilla Löwy <elmindreda@glfw.org>
 //
 // This software is provided 'as-is', without any express or implied
 // warranty. In no event will the authors be held liable for any damages
@@ -24,29 +24,12 @@
 //
 //========================================================================
 
-#include "internal.h"
+#define GLFW_MACOS_LIBRARY_TIMER_STATE _GLFWtimerMacOS macos;
 
-#if defined(GLFW_BUILD_WIN32_MODULE)
-
-//////////////////////////////////////////////////////////////////////////
-//////                       GLFW platform API                      //////
-//////////////////////////////////////////////////////////////////////////
-
-void* _glfwPlatformLoadModule(const char* path)
+// macOS-specific global timer data
+//
+typedef struct _GLFWtimerMacOS
 {
-    return LoadLibraryA(path);
-}
-
-void _glfwPlatformFreeModule(void* module)
-{
-    if (module)
-        FreeLibrary((HMODULE) module);
-}
-
-GLFWproc _glfwPlatformGetModuleSymbol(void* module, const char* name)
-{
-    return (GLFWproc) GetProcAddress((HMODULE) module, name);
-}
-
-#endif // GLFW_BUILD_WIN32_MODULE
+    uint64_t        frequency;
+} _GLFWtimerMacOS;
 

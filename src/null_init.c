@@ -57,6 +57,7 @@ GLFWbool _glfwConnectNull(int platformID, _GLFWplatform* platform)
         .getClipboardString = _glfwGetClipboardStringNull,
         .updatePreeditCursorRectangle = _glfwUpdatePreeditCursorRectangleNull,
         .resetPreeditText = _glfwResetPreeditTextNull,
+        .setTextInputFocus = _glfwSetTextInputFocusNull,
         .setIMEStatus = _glfwSetIMEStatusNull,
         .getIMEStatus = _glfwGetIMEStatusNull,
         .initJoysticks = _glfwInitJoysticksNull,
@@ -264,5 +265,6 @@ void _glfwTerminateNull(void)
     free(_glfw.null.clipboardString);
     _glfwTerminateOSMesa();
     _glfwTerminateEGL();
+    memset(&_glfw.null, 0, sizeof(_glfw.null));
 }
 
